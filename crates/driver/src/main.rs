@@ -92,6 +92,8 @@ fn main_loop(
 ) -> HidResult<()> {
     let mut buf = [0u8; 64];
     let mut button_states = [false; 48]; // Track previous state of all buttons
+    let mut prev_encoder_val: u8 = 0; // Track previous encoder value
+    let mut prev_slider_val: u8 = 0; // Track previous touch strip value
     loop {
         let size = device.read_timeout(&mut buf, 10)?;
         if size < 1 {
@@ -140,9 +142,10 @@ fn main_loop(
                         }
                     }
                     
-                    // Send MIDI CC for transport buttons only when state changes
+                    // Send MIDI CC for buttons only when state changes
                     if button_state_changed {
                         match button {
+                            // Transport buttons
                             Buttons::Play => send_transport_cc(port, settings.transport_cc_map.play, status, settings.transport_channel),
                             Buttons::Stop => send_transport_cc(port, settings.transport_cc_map.stop, status, settings.transport_channel),
                             Buttons::Rec => send_transport_cc(port, settings.transport_cc_map.rec, status, settings.transport_channel),
@@ -150,14 +153,114 @@ fn main_loop(
                             Buttons::Erase => send_transport_cc(port, settings.transport_cc_map.erase, status, settings.transport_channel),
                             Buttons::Tap => send_transport_cc(port, settings.transport_cc_map.tap, status, settings.transport_channel),
                             Buttons::Follow => send_transport_cc(port, settings.transport_cc_map.follow, status, settings.transport_channel),
-                            _ => {}
+                            
+                            // Navigation buttons
+                            Buttons::Left => send_transport_cc(port, settings.button_cc_map.left, status, settings.button_channel),
+                            Buttons::Right => send_transport_cc(port, settings.button_cc_map.right, status, settings.button_channel),
+                            
+                            // Main Control buttons
+                            Buttons::Maschine => send_transport_cc(port, settings.button_cc_map.maschine, status, settings.button_channel),
+                            Buttons::Star => send_transport_cc(port, settings.button_cc_map.star, status, settings.button_channel),
+                            Buttons::Browse => send_transport_cc(port, settings.button_cc_map.browse, status, settings.button_channel),
+                            Buttons::Volume => send_transport_cc(port, settings.button_cc_map.volume, status, settings.button_channel),
+                            
+                            // Performance buttons
+                            Buttons::Swing => send_transport_cc(port, settings.button_cc_map.swing, status, settings.button_channel),
+                            Buttons::Tempo => send_transport_cc(port, settings.button_cc_map.tempo, status, settings.button_channel),
+                            Buttons::Plugin => send_transport_cc(port, settings.button_cc_map.plugin, status, settings.button_channel),
+                            Buttons::Sampling => send_transport_cc(port, settings.button_cc_map.sampling, status, settings.button_channel),
+                            
+                            // Pitch/Mod buttons
+                            Buttons::Pitch => send_transport_cc(port, settings.button_cc_map.pitch, status, settings.button_channel),
+                            Buttons::Mod => send_transport_cc(port, settings.button_cc_map.mod_button, status, settings.button_channel),
+                            
+                            // Mode Selection buttons
+                            Buttons::Perform => send_transport_cc(port, settings.button_cc_map.perform, status, settings.button_channel),
+                            Buttons::Notes => send_transport_cc(port, settings.button_cc_map.notes, status, settings.button_channel),
+                            Buttons::Group => send_transport_cc(port, settings.button_cc_map.group, status, settings.button_channel),
+                            Buttons::Auto => send_transport_cc(port, settings.button_cc_map.auto, status, settings.button_channel),
+                            
+                            // Recording buttons
+                            Buttons::Lock => send_transport_cc(port, settings.button_cc_map.lock, status, settings.button_channel),
+                            Buttons::NoteRepeat => send_transport_cc(port, settings.button_cc_map.note_repeat, status, settings.button_channel),
+                            
+                            // Modifier buttons
+                            Buttons::Shift => send_transport_cc(port, settings.button_cc_map.shift, status, settings.button_channel),
+                            Buttons::FixedVol => send_transport_cc(port, settings.button_cc_map.fixed_vol, status, settings.button_channel),
+                            
+                            // Pad Mode buttons
+                            Buttons::PadMode => send_transport_cc(port, settings.button_cc_map.pad_mode, status, settings.button_channel),
+                            Buttons::Keyboard => send_transport_cc(port, settings.button_cc_map.keyboard, status, settings.button_channel),
+                            Buttons::Chords => send_transport_cc(port, settings.button_cc_map.chords, status, settings.button_channel),
+                            Buttons::Step => send_transport_cc(port, settings.button_cc_map.step, status, settings.button_channel),
+                            
+                            // Sequencer buttons
+                            Buttons::Scene => send_transport_cc(port, settings.button_cc_map.scene, status, settings.button_channel),
+                            Buttons::Pattern => send_transport_cc(port, settings.button_cc_map.pattern, status, settings.button_channel),
+                            Buttons::Events => send_transport_cc(port, settings.button_cc_map.events, status, settings.button_channel),
+                            Buttons::Variation => send_transport_cc(port, settings.button_cc_map.variation, status, settings.button_channel),
+                            Buttons::Duplicate => send_transport_cc(port, settings.button_cc_map.duplicate, status, settings.button_channel),
+                            
+                            // Track Control buttons
+                            Buttons::Select => send_transport_cc(port, settings.button_cc_map.select, status, settings.button_channel),
+                            Buttons::Solo => send_transport_cc(port, settings.button_cc_map.solo, status, settings.button_channel),
+                            Buttons::Mute => send_transport_cc(port, settings.button_cc_map.mute, status, settings.button_channel),
+                            
+                            // Encoder buttons (will be handled in task 4, but included for completeness)
+                            Buttons::EncoderPress => send_transport_cc(port, settings.encoder_cc_map.press, status, settings.encoder_channel),
+                            Buttons::EncoderTouch => send_transport_cc(port, settings.encoder_cc_map.touch, status, settings.encoder_channel),
                         }
                     }
                 }
             }
             let encoder_val = buf[7];
             println!("Encoder: {}", encoder_val);
+            
+            // Send MIDI CC for encoder rotation when value changes
+            if encoder_val != prev_encoder_val && encoder_val != 0 {
+                prev_encoder_val = encoder_val;
+                
+                // Send relative CC value (encoder_val as-is from hardware)
+                let message = MidiMessage::Controller {
+                    controller: settings.encoder_cc_map.rotation.into(),
+                    value: encoder_val.into(),
+                };
+                let event = LiveEvent::Midi {
+                    channel: settings.encoder_channel.into(),
+                    message,
+                };
+                let mut midi_buf = Vec::new();
+                event.write(&mut midi_buf).unwrap();
+                port.send(&midi_buf[..]).unwrap();
+            }
+            
             let slider_val = buf[10];
+            
+            // Send MIDI CC for touch strip when value changes
+            if slider_val != prev_slider_val {
+                prev_slider_val = slider_val;
+                
+                // Convert strip value (0-200 range) to MIDI range (0-127)
+                // Send value 0 when strip is released (slider_val == 0)
+                let midi_val = if slider_val == 0 {
+                    0
+                } else {
+                    ((slider_val as u16 * 127) / 200) as u8
+                };
+                
+                let message = MidiMessage::Controller {
+                    controller: settings.touch_strip_cc.into(),
+                    value: midi_val.into(),
+                };
+                let event = LiveEvent::Midi {
+                    channel: settings.touch_strip_channel.into(),
+                    message,
+                };
+                let mut midi_buf = Vec::new();
+                event.write(&mut midi_buf).unwrap();
+                port.send(&midi_buf[..]).unwrap();
+            }
+            
             if slider_val != 0 {
                 println!("Slider: {}", slider_val);
                 let cnt = (slider_val as i32 - 1 + 5) * 25 / 200 - 1;

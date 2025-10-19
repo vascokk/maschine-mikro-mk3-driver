@@ -12,6 +12,18 @@ pub(crate) struct Settings {
     pub transport_channel: u8,
     #[serde(default)]
     pub transport_cc_map: TransportCCMap,
+    #[serde(default)]
+    pub button_channel: u8,
+    #[serde(default)]
+    pub button_cc_map: ButtonCCMap,
+    #[serde(default)]
+    pub encoder_channel: u8,
+    #[serde(default)]
+    pub encoder_cc_map: EncoderCCMap,
+    #[serde(default)]
+    pub touch_strip_channel: u8,
+    #[serde(default)]
+    pub touch_strip_cc: u8,
 }
 
 #[derive(Deserialize, Debug)]
@@ -39,6 +51,136 @@ impl Default for TransportCCMap {
     }
 }
 
+#[derive(Deserialize, Debug)]
+pub(crate) struct ButtonCCMap {
+    // Navigation
+    pub left: u8,
+    pub right: u8,
+    
+    // Main Control
+    pub maschine: u8,
+    pub star: u8,
+    pub browse: u8,
+    pub volume: u8,
+    
+    // Performance
+    pub swing: u8,
+    pub tempo: u8,
+    pub plugin: u8,
+    pub sampling: u8,
+    
+    // Pitch/Mod
+    pub pitch: u8,
+    pub mod_button: u8,
+    
+    // Mode Selection
+    pub perform: u8,
+    pub notes: u8,
+    pub group: u8,
+    pub auto: u8,
+    
+    // Recording
+    pub lock: u8,
+    pub note_repeat: u8,
+    
+    // Modifiers
+    pub shift: u8,
+    pub fixed_vol: u8,
+    
+    // Pad Modes
+    pub pad_mode: u8,
+    pub keyboard: u8,
+    pub chords: u8,
+    pub step: u8,
+    
+    // Sequencer
+    pub scene: u8,
+    pub pattern: u8,
+    pub events: u8,
+    pub variation: u8,
+    pub duplicate: u8,
+    
+    // Track Control
+    pub select: u8,
+    pub solo: u8,
+    pub mute: u8,
+}
+
+impl Default for ButtonCCMap {
+    fn default() -> Self {
+        Self {
+            // Navigation
+            left: 20,
+            right: 21,
+            
+            // Main Control
+            maschine: 22,
+            star: 23,
+            browse: 24,
+            volume: 25,
+            
+            // Performance
+            swing: 26,
+            tempo: 27,
+            plugin: 28,
+            sampling: 29,
+            
+            // Pitch/Mod
+            pitch: 30,
+            mod_button: 31,
+            
+            // Mode Selection
+            perform: 32,
+            notes: 33,
+            group: 34,
+            auto: 35,
+            
+            // Recording
+            lock: 36,
+            note_repeat: 37,
+            
+            // Modifiers
+            shift: 38,
+            fixed_vol: 39,
+            
+            // Pad Modes
+            pad_mode: 40,
+            keyboard: 41,
+            chords: 42,
+            step: 43,
+            
+            // Sequencer
+            scene: 44,
+            pattern: 45,
+            events: 46,
+            variation: 47,
+            duplicate: 48,
+            
+            // Track Control
+            select: 49,
+            solo: 50,
+            mute: 51,
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub(crate) struct EncoderCCMap {
+    pub rotation: u8,
+    pub press: u8,
+    pub touch: u8,
+}
+
+impl Default for EncoderCCMap {
+    fn default() -> Self {
+        Self {
+            rotation: 10,
+            press: 52,
+            touch: 53,
+        }
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -49,6 +191,12 @@ impl Default for Settings {
             port_name: "Maschine Mikro MK3 MIDI Out".to_string(),
             transport_channel: 0,
             transport_cc_map: TransportCCMap::default(),
+            button_channel: 0,
+            button_cc_map: ButtonCCMap::default(),
+            encoder_channel: 0,
+            encoder_cc_map: EncoderCCMap::default(),
+            touch_strip_channel: 0,
+            touch_strip_cc: 1,
         }
     }
 }
@@ -97,6 +245,99 @@ impl Settings {
             if cc >= 128 {
                 return Err(format!(
                     "Transport CC for {} must be 0-127 (found {})",
+                    name, cc
+                ));
+            }
+        }
+
+        // Validate button_channel is in valid MIDI channel range (0-15)
+        if self.button_channel > 15 {
+            return Err(format!(
+                "Button MIDI channel must be 0-15 (found {})",
+                self.button_channel
+            ));
+        }
+
+        // Validate encoder_channel is in valid MIDI channel range (0-15)
+        if self.encoder_channel > 15 {
+            return Err(format!(
+                "Encoder MIDI channel must be 0-15 (found {})",
+                self.encoder_channel
+            ));
+        }
+
+        // Validate touch_strip_channel is in valid MIDI channel range (0-15)
+        if self.touch_strip_channel > 15 {
+            return Err(format!(
+                "Touch strip MIDI channel must be 0-15 (found {})",
+                self.touch_strip_channel
+            ));
+        }
+
+        // Validate touch_strip_cc is in valid CC range (0-127)
+        if self.touch_strip_cc >= 128 {
+            return Err(format!(
+                "Touch strip CC must be 0-127 (found {})",
+                self.touch_strip_cc
+            ));
+        }
+
+        // Validate all button CC numbers in ButtonCCMap are in valid range (0-127)
+        let button_ccs = [
+            ("left", self.button_cc_map.left),
+            ("right", self.button_cc_map.right),
+            ("maschine", self.button_cc_map.maschine),
+            ("star", self.button_cc_map.star),
+            ("browse", self.button_cc_map.browse),
+            ("volume", self.button_cc_map.volume),
+            ("swing", self.button_cc_map.swing),
+            ("tempo", self.button_cc_map.tempo),
+            ("plugin", self.button_cc_map.plugin),
+            ("sampling", self.button_cc_map.sampling),
+            ("pitch", self.button_cc_map.pitch),
+            ("mod_button", self.button_cc_map.mod_button),
+            ("perform", self.button_cc_map.perform),
+            ("notes", self.button_cc_map.notes),
+            ("group", self.button_cc_map.group),
+            ("auto", self.button_cc_map.auto),
+            ("lock", self.button_cc_map.lock),
+            ("note_repeat", self.button_cc_map.note_repeat),
+            ("shift", self.button_cc_map.shift),
+            ("fixed_vol", self.button_cc_map.fixed_vol),
+            ("pad_mode", self.button_cc_map.pad_mode),
+            ("keyboard", self.button_cc_map.keyboard),
+            ("chords", self.button_cc_map.chords),
+            ("step", self.button_cc_map.step),
+            ("scene", self.button_cc_map.scene),
+            ("pattern", self.button_cc_map.pattern),
+            ("events", self.button_cc_map.events),
+            ("variation", self.button_cc_map.variation),
+            ("duplicate", self.button_cc_map.duplicate),
+            ("select", self.button_cc_map.select),
+            ("solo", self.button_cc_map.solo),
+            ("mute", self.button_cc_map.mute),
+        ];
+
+        for (name, cc) in button_ccs {
+            if cc >= 128 {
+                return Err(format!(
+                    "Button CC for {} must be 0-127 (found {})",
+                    name, cc
+                ));
+            }
+        }
+
+        // Validate all encoder CC numbers in EncoderCCMap are in valid range (0-127)
+        let encoder_ccs = [
+            ("rotation", self.encoder_cc_map.rotation),
+            ("press", self.encoder_cc_map.press),
+            ("touch", self.encoder_cc_map.touch),
+        ];
+
+        for (name, cc) in encoder_ccs {
+            if cc >= 128 {
+                return Err(format!(
+                    "Encoder CC for {} must be 0-127 (found {})",
                     name, cc
                 ));
             }

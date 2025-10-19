@@ -20,3 +20,85 @@ restart = 116
 erase = 120
 tap = 121
 follow = 122
+
+# Button MIDI channel (valid range: 0-15, default: 0)
+# This determines which MIDI channel all non-transport buttons send messages on
+button_channel = 0
+
+# Button CC mappings (valid range: 0-127)
+# These CC numbers are sent when buttons are pressed/released
+# Button press sends value 127, button release sends value 0
+[button_cc_map]
+# Navigation buttons
+left = 20
+right = 21
+
+# Main control buttons
+maschine = 22
+star = 23
+browse = 24
+volume = 25
+
+# Performance control buttons
+swing = 26
+tempo = 27
+plugin = 28
+sampling = 29
+
+# Pitch and modulation buttons
+pitch = 30
+mod_button = 31
+
+# Mode selection buttons
+perform = 32
+notes = 33
+group = 34
+auto = 35
+
+# Recording control buttons
+lock = 36
+note_repeat = 37
+
+# Modifier buttons
+shift = 38
+fixed_vol = 39
+
+# Pad mode buttons
+pad_mode = 40
+keyboard = 41
+chords = 42
+step = 43
+
+# Sequencer control buttons
+scene = 44
+pattern = 45
+events = 46
+variation = 47
+duplicate = 48
+
+# Track control buttons
+select = 49
+solo = 50
+mute = 51
+
+# Encoder MIDI channel (valid range: 0-15, default: 0)
+# This determines which MIDI channel the encoder sends messages on
+encoder_channel = 0
+
+# Encoder CC mappings (valid range: 0-127)
+# rotation: CC sent when encoder is rotated (relative values)
+# press: CC sent when encoder is pressed (127) or released (0)
+# touch: CC sent when encoder is touched (127) or released (0)
+[encoder_cc_map]
+rotation = 10
+press = 52
+touch = 53
+
+# Touch strip MIDI channel (valid range: 0-15, default: 0)
+# This determines which MIDI channel the touch strip sends messages on
+touch_strip_channel = 0
+
+# Touch strip CC number (valid range: 0-127, default: 1)
+# CC 1 is the standard modulation wheel control
+# The strip sends absolute position values (0-127)
+touch_strip_cc = 1
