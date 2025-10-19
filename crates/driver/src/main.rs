@@ -12,6 +12,30 @@ use maschine_library::screen::Screen;
 use midir::os::unix::VirtualOutput;
 use midir::{MidiOutput, MidiOutputConnection};
 use midly::{MidiMessage, live::LiveEvent};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Copy)]
+struct ButtonState {
+    physical_pressed: bool,
+    toggle_state: bool,
+    last_sent_value: u8,
+}
+
+impl Default for ButtonState {
+    fn default() -> Self {
+        Self {
+            physical_pressed: false,
+            toggle_state: false,
+            last_sent_value: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ShiftState {
+    pressed: bool,
+    used_as_modifier: bool, // Track if Shift was used in a combination
+}
 
 #[derive(Parser, Debug)]
 #[clap(
@@ -63,13 +87,106 @@ fn main() -> HidResult<()> {
     Ok(())
 }
 
-fn send_transport_cc(
-    port: &mut MidiOutputConnection,
-    cc_number: u8,
+fn process_button_event(
+    button: Buttons,
     pressed: bool,
-    channel: u8,
+    button_states: &mut HashMap<Buttons, ButtonState>,
+    shift_state: &mut ShiftState,
+    settings: &Settings,
+    port: &mut MidiOutputConnection,
 ) {
-    let value = if pressed { 127 } else { 0 };
+    // Get or create button state
+    let state = button_states.entry(button).or_insert(ButtonState::default());
+    
+    // Check if physical state changed
+    if state.physical_pressed == pressed {
+        return; // No change, ignore
+    }
+    
+    state.physical_pressed = pressed;
+    
+    // Handle Shift button specially to prevent CC conflicts
+    // The Shift button acts as a modifier key:
+    // - When pressed alone and released: sends its own CC (127 then 0)
+    // - When used in a combination: doesn't send its own CC
+    // This prevents the Shift CC from overwriting combination CCs
+    if button == Buttons::Shift {
+        if pressed {
+            // Shift pressed - mark as not yet used as modifier
+            shift_state.pressed = true;
+            shift_state.used_as_modifier = false;
+            // Don't send MIDI yet - wait to see if it's used as a modifier
+            return;
+        } else {
+            // Shift released
+            shift_state.pressed = false;
+            // Only send Shift CC if it wasn't used as a modifier
+            if !shift_state.used_as_modifier {
+                // Send Shift press and release as a single action
+                let cc_number = get_single_button_cc(button, settings);
+                let channel = settings.button_channel;
+                send_button_cc(port, cc_number, 127, channel);
+                send_button_cc(port, cc_number, 0, channel);
+            }
+            shift_state.used_as_modifier = false;
+            return;
+        }
+    }
+    
+    // For non-Shift buttons, check if Shift is held
+    if shift_state.pressed && pressed {
+        // Mark that Shift is being used as a modifier
+        shift_state.used_as_modifier = true;
+    }
+    
+    // Determine if this is a toggle button
+    let button_name = format!("{:?}", button).to_lowercase();
+    let is_toggle = settings.button_modes.is_toggle(&button_name);
+    
+    // Determine CC number based on shift state
+    let cc_number = if shift_state.pressed {
+        get_shift_combination_cc(button, settings)
+    } else {
+        get_single_button_cc(button, settings)
+    };
+    
+    // Calculate MIDI value to send
+    let midi_value = if is_toggle {
+        if pressed {
+            // Toggle the state on press
+            state.toggle_state = !state.toggle_state;
+            if state.toggle_state { 127 } else { 0 }
+        } else {
+            // Don't send anything on release for toggle buttons
+            return;
+        }
+    } else {
+        // Momentary mode: send 127 on press, 0 on release
+        if pressed { 127 } else { 0 }
+    };
+    
+    // Avoid duplicate messages
+    if state.last_sent_value == midi_value {
+        return;
+    }
+    
+    state.last_sent_value = midi_value;
+    
+    // Determine which channel to use
+    let channel = match button {
+        Buttons::Play | Buttons::Stop | Buttons::Rec | 
+        Buttons::Restart | Buttons::Erase | Buttons::Tap | Buttons::Follow 
+            => settings.transport_channel,
+        Buttons::EncoderPress | Buttons::EncoderTouch 
+            => settings.encoder_channel,
+        _ => settings.button_channel,
+    };
+    
+    // Send MIDI message
+    send_button_cc(port, cc_number, midi_value, channel);
+}
+
+fn send_button_cc(port: &mut MidiOutputConnection, cc_number: u8, value: u8, channel: u8) {
     let message = MidiMessage::Controller {
         controller: cc_number.into(),
         value: value.into(),
@@ -83,6 +200,146 @@ fn send_transport_cc(
     port.send(&buf[..]).unwrap();
 }
 
+fn get_single_button_cc(button: Buttons, settings: &Settings) -> u8 {
+    match button {
+        // Navigation buttons
+        Buttons::Left => settings.button_cc_map.left,
+        Buttons::Right => settings.button_cc_map.right,
+        
+        // Main Control buttons
+        Buttons::Maschine => settings.button_cc_map.maschine,
+        Buttons::Star => settings.button_cc_map.star,
+        Buttons::Browse => settings.button_cc_map.browse,
+        Buttons::Volume => settings.button_cc_map.volume,
+        
+        // Performance buttons
+        Buttons::Swing => settings.button_cc_map.swing,
+        Buttons::Tempo => settings.button_cc_map.tempo,
+        Buttons::Plugin => settings.button_cc_map.plugin,
+        Buttons::Sampling => settings.button_cc_map.sampling,
+        
+        // Pitch/Mod buttons
+        Buttons::Pitch => settings.button_cc_map.pitch,
+        Buttons::Mod => settings.button_cc_map.mod_button,
+        
+        // Mode Selection buttons
+        Buttons::Perform => settings.button_cc_map.perform,
+        Buttons::Notes => settings.button_cc_map.notes,
+        Buttons::Group => settings.button_cc_map.group,
+        Buttons::Auto => settings.button_cc_map.auto,
+        
+        // Recording buttons
+        Buttons::Lock => settings.button_cc_map.lock,
+        Buttons::NoteRepeat => settings.button_cc_map.note_repeat,
+        
+        // Modifier buttons
+        Buttons::Shift => settings.button_cc_map.shift,
+        Buttons::FixedVel => settings.button_cc_map.fixed_vol,
+        
+        // Pad Mode buttons
+        Buttons::PadMode => settings.button_cc_map.pad_mode,
+        Buttons::Keyboard => settings.button_cc_map.keyboard,
+        Buttons::Chords => settings.button_cc_map.chords,
+        Buttons::Step => settings.button_cc_map.step,
+        
+        // Sequencer buttons
+        Buttons::Scene => settings.button_cc_map.scene,
+        Buttons::Pattern => settings.button_cc_map.pattern,
+        Buttons::Events => settings.button_cc_map.events,
+        Buttons::Variation => settings.button_cc_map.variation,
+        Buttons::Duplicate => settings.button_cc_map.duplicate,
+        
+        // Track Control buttons
+        Buttons::Select => settings.button_cc_map.select,
+        Buttons::Solo => settings.button_cc_map.solo,
+        Buttons::Mute => settings.button_cc_map.mute,
+        
+        // Transport buttons
+        Buttons::Play => settings.transport_cc_map.play,
+        Buttons::Stop => settings.transport_cc_map.stop,
+        Buttons::Rec => settings.transport_cc_map.rec,
+        Buttons::Restart => settings.transport_cc_map.restart,
+        Buttons::Erase => settings.transport_cc_map.erase,
+        Buttons::Tap => settings.transport_cc_map.tap,
+        Buttons::Follow => settings.transport_cc_map.follow,
+        
+        // Encoder buttons
+        Buttons::EncoderPress => settings.encoder_cc_map.press,
+        Buttons::EncoderTouch => settings.encoder_cc_map.touch,
+    }
+}
+
+fn get_shift_combination_cc(button: Buttons, settings: &Settings) -> u8 {
+    match button {
+        // Navigation buttons
+        Buttons::Left => settings.shift_combinations.left,
+        Buttons::Right => settings.shift_combinations.right,
+        
+        // Main Control buttons
+        Buttons::Maschine => settings.shift_combinations.maschine,
+        Buttons::Star => settings.shift_combinations.star,
+        Buttons::Browse => settings.shift_combinations.browse,
+        Buttons::Volume => settings.shift_combinations.volume,
+        
+        // Performance buttons
+        Buttons::Swing => settings.shift_combinations.swing,
+        Buttons::Tempo => settings.shift_combinations.tempo,
+        Buttons::Plugin => settings.shift_combinations.plugin,
+        Buttons::Sampling => settings.shift_combinations.sampling,
+        
+        // Pitch/Mod buttons
+        Buttons::Pitch => settings.shift_combinations.pitch,
+        Buttons::Mod => settings.shift_combinations.mod_button,
+        
+        // Mode Selection buttons
+        Buttons::Perform => settings.shift_combinations.perform,
+        Buttons::Notes => settings.shift_combinations.notes,
+        Buttons::Group => settings.shift_combinations.group,
+        Buttons::Auto => settings.shift_combinations.auto,
+        
+        // Recording buttons
+        Buttons::Lock => settings.shift_combinations.lock,
+        Buttons::NoteRepeat => settings.shift_combinations.note_repeat,
+        
+        // FixedVel button
+        Buttons::FixedVel => settings.shift_combinations.fixed_vel,
+        
+        // Pad Mode buttons
+        Buttons::PadMode => settings.shift_combinations.pad_mode,
+        Buttons::Keyboard => settings.shift_combinations.keyboard,
+        Buttons::Chords => settings.shift_combinations.chords,
+        Buttons::Step => settings.shift_combinations.step,
+        
+        // Sequencer buttons
+        Buttons::Scene => settings.shift_combinations.scene,
+        Buttons::Pattern => settings.shift_combinations.pattern,
+        Buttons::Events => settings.shift_combinations.events,
+        Buttons::Variation => settings.shift_combinations.variation,
+        Buttons::Duplicate => settings.shift_combinations.duplicate,
+        
+        // Track Control buttons
+        Buttons::Select => settings.shift_combinations.select,
+        Buttons::Solo => settings.shift_combinations.solo,
+        Buttons::Mute => settings.shift_combinations.mute,
+        
+        // Transport buttons
+        Buttons::Play => settings.shift_combinations.play,
+        Buttons::Stop => settings.shift_combinations.stop,
+        Buttons::Rec => settings.shift_combinations.rec,
+        Buttons::Restart => settings.shift_combinations.restart,
+        Buttons::Erase => settings.shift_combinations.erase,
+        Buttons::Tap => settings.shift_combinations.tap,
+        Buttons::Follow => settings.shift_combinations.follow,
+        
+        // Encoder buttons
+        Buttons::EncoderPress => settings.shift_combinations.encoder_press,
+        Buttons::EncoderTouch => settings.shift_combinations.encoder_touch,
+        
+        // Shift+Shift case: returns single Shift CC
+        Buttons::Shift => get_single_button_cc(button, settings),
+    }
+}
+
 fn main_loop(
     device: &HidDevice,
     _screen: &mut Screen,
@@ -91,7 +348,8 @@ fn main_loop(
     settings: &Settings,
 ) -> HidResult<()> {
     let mut buf = [0u8; 64];
-    let mut button_states = [false; 48]; // Track previous state of all buttons
+    let mut button_states: HashMap<Buttons, ButtonState> = HashMap::new();
+    let mut shift_state = ShiftState::default();
     let mut prev_encoder_val: u8 = 0; // Track previous encoder value
     let mut prev_slider_val: u8 = 0; // Track previous touch strip value
     loop {
@@ -116,17 +374,15 @@ fn main_loop(
                     let status = buf[i + 1] & (1 << j);
                     let status = status > 0;
                     
-                    // Check if button state changed
-                    let prev_status = button_states[idx];
-                    let button_state_changed = status != prev_status;
+                    // Check if button state changed for debug output
+                    let state = button_states.get(&button);
+                    let button_state_changed = state.map_or(true, |s| s.physical_pressed != status);
                     
-                    if button_state_changed {
-                        button_states[idx] = status;
-                        if status {
-                            println!("New status: {:?}", button);
-                        }
+                    if button_state_changed && status {
+                        println!("New status: {:?}", button);
                     }
                     
+                    // Update button lights
                     if lights.button_has_light(button) {
                         let light_status = lights.get_button(button) != Brightness::Off;
                         if status != light_status {
@@ -142,75 +398,8 @@ fn main_loop(
                         }
                     }
                     
-                    // Send MIDI CC for buttons only when state changes
-                    if button_state_changed {
-                        match button {
-                            // Transport buttons
-                            Buttons::Play => send_transport_cc(port, settings.transport_cc_map.play, status, settings.transport_channel),
-                            Buttons::Stop => send_transport_cc(port, settings.transport_cc_map.stop, status, settings.transport_channel),
-                            Buttons::Rec => send_transport_cc(port, settings.transport_cc_map.rec, status, settings.transport_channel),
-                            Buttons::Restart => send_transport_cc(port, settings.transport_cc_map.restart, status, settings.transport_channel),
-                            Buttons::Erase => send_transport_cc(port, settings.transport_cc_map.erase, status, settings.transport_channel),
-                            Buttons::Tap => send_transport_cc(port, settings.transport_cc_map.tap, status, settings.transport_channel),
-                            Buttons::Follow => send_transport_cc(port, settings.transport_cc_map.follow, status, settings.transport_channel),
-                            
-                            // Navigation buttons
-                            Buttons::Left => send_transport_cc(port, settings.button_cc_map.left, status, settings.button_channel),
-                            Buttons::Right => send_transport_cc(port, settings.button_cc_map.right, status, settings.button_channel),
-                            
-                            // Main Control buttons
-                            Buttons::Maschine => send_transport_cc(port, settings.button_cc_map.maschine, status, settings.button_channel),
-                            Buttons::Star => send_transport_cc(port, settings.button_cc_map.star, status, settings.button_channel),
-                            Buttons::Browse => send_transport_cc(port, settings.button_cc_map.browse, status, settings.button_channel),
-                            Buttons::Volume => send_transport_cc(port, settings.button_cc_map.volume, status, settings.button_channel),
-                            
-                            // Performance buttons
-                            Buttons::Swing => send_transport_cc(port, settings.button_cc_map.swing, status, settings.button_channel),
-                            Buttons::Tempo => send_transport_cc(port, settings.button_cc_map.tempo, status, settings.button_channel),
-                            Buttons::Plugin => send_transport_cc(port, settings.button_cc_map.plugin, status, settings.button_channel),
-                            Buttons::Sampling => send_transport_cc(port, settings.button_cc_map.sampling, status, settings.button_channel),
-                            
-                            // Pitch/Mod buttons
-                            Buttons::Pitch => send_transport_cc(port, settings.button_cc_map.pitch, status, settings.button_channel),
-                            Buttons::Mod => send_transport_cc(port, settings.button_cc_map.mod_button, status, settings.button_channel),
-                            
-                            // Mode Selection buttons
-                            Buttons::Perform => send_transport_cc(port, settings.button_cc_map.perform, status, settings.button_channel),
-                            Buttons::Notes => send_transport_cc(port, settings.button_cc_map.notes, status, settings.button_channel),
-                            Buttons::Group => send_transport_cc(port, settings.button_cc_map.group, status, settings.button_channel),
-                            Buttons::Auto => send_transport_cc(port, settings.button_cc_map.auto, status, settings.button_channel),
-                            
-                            // Recording buttons
-                            Buttons::Lock => send_transport_cc(port, settings.button_cc_map.lock, status, settings.button_channel),
-                            Buttons::NoteRepeat => send_transport_cc(port, settings.button_cc_map.note_repeat, status, settings.button_channel),
-                            
-                            // Modifier buttons
-                            Buttons::Shift => send_transport_cc(port, settings.button_cc_map.shift, status, settings.button_channel),
-                            Buttons::FixedVel => send_transport_cc(port, settings.button_cc_map.fixed_vol, status, settings.button_channel),
-                            
-                            // Pad Mode buttons
-                            Buttons::PadMode => send_transport_cc(port, settings.button_cc_map.pad_mode, status, settings.button_channel),
-                            Buttons::Keyboard => send_transport_cc(port, settings.button_cc_map.keyboard, status, settings.button_channel),
-                            Buttons::Chords => send_transport_cc(port, settings.button_cc_map.chords, status, settings.button_channel),
-                            Buttons::Step => send_transport_cc(port, settings.button_cc_map.step, status, settings.button_channel),
-                            
-                            // Sequencer buttons
-                            Buttons::Scene => send_transport_cc(port, settings.button_cc_map.scene, status, settings.button_channel),
-                            Buttons::Pattern => send_transport_cc(port, settings.button_cc_map.pattern, status, settings.button_channel),
-                            Buttons::Events => send_transport_cc(port, settings.button_cc_map.events, status, settings.button_channel),
-                            Buttons::Variation => send_transport_cc(port, settings.button_cc_map.variation, status, settings.button_channel),
-                            Buttons::Duplicate => send_transport_cc(port, settings.button_cc_map.duplicate, status, settings.button_channel),
-                            
-                            // Track Control buttons
-                            Buttons::Select => send_transport_cc(port, settings.button_cc_map.select, status, settings.button_channel),
-                            Buttons::Solo => send_transport_cc(port, settings.button_cc_map.solo, status, settings.button_channel),
-                            Buttons::Mute => send_transport_cc(port, settings.button_cc_map.mute, status, settings.button_channel),
-                            
-                            // Encoder buttons (will be handled in task 4, but included for completeness)
-                            Buttons::EncoderPress => send_transport_cc(port, settings.encoder_cc_map.press, status, settings.encoder_channel),
-                            Buttons::EncoderTouch => send_transport_cc(port, settings.encoder_cc_map.touch, status, settings.encoder_channel),
-                        }
-                    }
+                    // Process button event through unified handler
+                    process_button_event(button, status, &mut button_states, &mut shift_state, settings, port);
                 }
             }
             let encoder_val = buf[7];

@@ -1,6 +1,6 @@
 use num_derive::FromPrimitive;
 
-#[derive(FromPrimitive, Debug, Clone, Copy, PartialEq)]
+#[derive(FromPrimitive, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Buttons {
     Maschine = 0,
     Star = 1,

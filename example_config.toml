@@ -102,3 +102,102 @@ touch_strip_channel = 0
 # CC 1 is the standard modulation wheel control
 # The strip sends absolute position values (0-127)
 touch_strip_cc = 1
+
+# Button modes configuration
+# Configure which buttons use toggle mode (latching) vs momentary mode (default)
+# Toggle mode: Button alternates between on (127) and off (0) with each press
+# Momentary mode: Button sends 127 on press, 0 on release
+# Only list buttons you want to set to toggle mode (all others default to momentary)
+#
+# Valid button names (case-insensitive):
+#   Navigation: left, right
+#   Main Control: maschine, star, browse, volume
+#   Performance: swing, tempo, plugin, sampling
+#   Pitch/Mod: pitch, mod_button
+#   Mode Selection: perform, notes, group, auto
+#   Recording: lock, note_repeat
+#   Modifiers: shift, fixed_vol
+#   Pad Modes: pad_mode, keyboard, chords, step
+#   Sequencer: scene, pattern, events, variation, duplicate
+#   Track Control: select, solo, mute
+#   Transport: play, stop, rec, restart, erase, tap, follow
+#   Encoder: encoder_press, encoder_touch
+#
+[button_modes]
+# Example: Configure mute, solo, and rec as toggle buttons
+# Uncomment and customize as needed:
+# toggle_buttons = { "mute" = true, "solo" = true, "rec" = true }
+
+# Shift button combinations
+# When Shift is held and another button is pressed, a different CC number is sent
+# This effectively doubles your available button mappings (40 single + 40 Shift combinations)
+# Default CC numbers: 54-93 (sequential allocation)
+# Only specify values if you want to override the defaults
+#
+# Note: Shift+Shift sends the regular Shift CC (not a combination)
+# Note: Toggle mode applies independently to single presses and Shift combinations
+#
+[shift_combinations]
+# Navigation (2 buttons)
+left = 54
+right = 55
+
+# Main Control (4 buttons)
+maschine = 56
+star = 57
+browse = 58
+volume = 59
+
+# Performance (4 buttons)
+swing = 60
+tempo = 61
+plugin = 62
+sampling = 63
+
+# Pitch/Mod (2 buttons)
+pitch = 64
+mod_button = 65
+
+# Mode Selection (4 buttons)
+perform = 66
+notes = 67
+group = 68
+auto = 69
+
+# Recording (2 buttons)
+lock = 70
+note_repeat = 71
+
+# FixedVel (1 button - can be used with Shift)
+fixed_vol = 72
+
+# Pad Modes (4 buttons)
+pad_mode = 73
+keyboard = 74
+chords = 75
+step = 76
+
+# Sequencer (5 buttons)
+scene = 77
+pattern = 78
+events = 79
+variation = 80
+duplicate = 81
+
+# Track Control (3 buttons)
+select = 82
+solo = 83
+mute = 84
+
+# Transport (7 buttons)
+play = 85
+stop = 86
+rec = 87
+restart = 88
+erase = 89
+tap = 90
+follow = 91
+
+# Encoder (2 buttons)
+encoder_press = 92
+encoder_touch = 93
