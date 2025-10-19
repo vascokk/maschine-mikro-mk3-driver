@@ -496,6 +496,8 @@ fn main_loop(
                 }
 
                 let note = settings.notemaps[idx as usize];
+                println!("Sending MIDI note: {} for pad {}", note, idx);
+
                 let mut velocity = (val >> 5) as u8;
                 if val > 0 && velocity == 0 {
                     velocity = 1;
@@ -518,6 +520,7 @@ fn main_loop(
                         channel: 0.into(),
                         message: evt,
                     };
+
                     let mut buf = Vec::new();
                     l_ev.write(&mut buf).unwrap();
                     port.send(&buf[..]).unwrap()
