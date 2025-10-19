@@ -44,28 +44,33 @@ I tried to make a version that could do both, but due to 1) how `midir` handles 
 
 **Note:** In previous versions, 98-maschine.rules was granting access to Maschine only to users in `input` group. This is no longer needed, the new version of the udev rules file allows Maschine to be accessed by any user. This simplifies installation, e.g., for Ubuntu users, as by default there's no `input` group there.
 
-## Progress
+## Features
 
-What works:
- - Pads,
- - Buttons,
- - Encoder,
- - Slider,
- - LEDs,
- - Screen.
+Everything works and is fully configurable via TOML config:
+ - **Pads**: Send MIDI notes with velocity sensitivity and aftertouch
+ - **All 40 Buttons**: Fully mapped to MIDI CC messages
+ - **Encoder**: Rotation (relative CC), press, and touch events
+ - **Touch Strip**: Mapped to MIDI CC (default: modulation wheel CC1)
+ - **LEDs**: Full control with 4 brightness levels per button
+ - **Screen**: Hardware support (not yet utilized)
 
-So, basically everything, and even more than with the official driver.
-For example, it is now possible to turn unpressed pad LEDs completely off in the layout.
-Or it turns out that every button has 4 levels of brightness, not just Off/On as in the official MIDI Mode.
+### Advanced Features
 
-Although at the moment, only pads are exported via MIDI.
-Pad MIDI notes can be changed through custom toml config (e.g., `-c example_config.toml`).
+- **Shift Combinations**: Hold Shift + any button to send different CC numbers, effectively doubling your available mappings (40 single + 40 combinations = 80 total button mappings)
+- **Toggle vs Momentary Modes**: Configure any button to work as a toggle (latching) or momentary switch
+- **Separate MIDI Channels**: Configure different MIDI channels for transport buttons, regular buttons, encoder, and touch strip
+- **Fully Customizable CC Mappings**: Every button, encoder action, and touch strip can be mapped to any CC number (0-127)
+- **Configurable Pad Notes**: Map each of the 16 pads to any MIDI note number
 
-Would be cool to be able to export buttons and other functions via MIDI, OSC, etc too. GUI editor for the config file might be nice to have too.
+This driver goes beyond the official MIDI Mode capabilities. For example, unpressed pad LEDs can be completely turned off, and all buttons have 4 brightness levels instead of just Off/On.
+
+See `example_config.toml` for a complete configuration reference with all available options.
 
 Contributions are welcome!
 
-## Goal
+## Roadmap
 
-The current goal is to reimplement the official MIDI Mode: mappable pads, buttons, slider, encoder, changeable LED color schemes.
-Advanced uses, like modal functions as in Maschine software (e.g., Scenes, Patterns, Shift+Pad actions) are not yet planned.
+The initial goal of reimplementing the official MIDI Mode has been achieved. Future enhancements could include:
+- GUI editor for the config file
+- OSC support alongside MIDI
+- Advanced modal functions similar to Maschine software (Scenes, Patterns, context-sensitive Shift+Pad actions)
