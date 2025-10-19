@@ -63,6 +63,26 @@ fn main() -> HidResult<()> {
     Ok(())
 }
 
+fn send_transport_cc(
+    port: &mut MidiOutputConnection,
+    cc_number: u8,
+    pressed: bool,
+    channel: u8,
+) {
+    let value = if pressed { 127 } else { 0 };
+    let message = MidiMessage::Controller {
+        controller: cc_number.into(),
+        value: value.into(),
+    };
+    let event = LiveEvent::Midi {
+        channel: channel.into(),
+        message,
+    };
+    let mut buf = Vec::new();
+    event.write(&mut buf).unwrap();
+    port.send(&buf[..]).unwrap();
+}
+
 fn main_loop(
     device: &HidDevice,
     _screen: &mut Screen,
@@ -71,12 +91,13 @@ fn main_loop(
     settings: &Settings,
 ) -> HidResult<()> {
     let mut buf = [0u8; 64];
+    let mut button_states = [false; 48]; // Track previous state of all buttons
     loop {
         let size = device.read_timeout(&mut buf, 10)?;
         if size < 1 {
             continue;
         }
-
+        println!("DEBUG: {:?}", &buf[..]);
         let mut changed_lights = false;
         if buf[0] == 0x01 {
             // button mode
@@ -92,9 +113,18 @@ fn main_loop(
                     };
                     let status = buf[i + 1] & (1 << j);
                     let status = status > 0;
-                    if status {
-                        println!("{:?}", button);
+                    
+                    // Check if button state changed
+                    let prev_status = button_states[idx];
+                    let button_state_changed = status != prev_status;
+                    
+                    if button_state_changed {
+                        button_states[idx] = status;
+                        if status {
+                            println!("{:?}", button);
+                        }
                     }
+                    
                     if lights.button_has_light(button) {
                         let light_status = lights.get_button(button) != Brightness::Off;
                         if status != light_status {
@@ -107,6 +137,20 @@ fn main_loop(
                                 },
                             );
                             changed_lights = true;
+                        }
+                    }
+                    
+                    // Send MIDI CC for transport buttons only when state changes
+                    if button_state_changed {
+                        match button {
+                            Buttons::Play => send_transport_cc(port, settings.transport_cc_map.play, status, settings.transport_channel),
+                            Buttons::Stop => send_transport_cc(port, settings.transport_cc_map.stop, status, settings.transport_channel),
+                            Buttons::Rec => send_transport_cc(port, settings.transport_cc_map.rec, status, settings.transport_channel),
+                            Buttons::Restart => send_transport_cc(port, settings.transport_cc_map.restart, status, settings.transport_channel),
+                            Buttons::Erase => send_transport_cc(port, settings.transport_cc_map.erase, status, settings.transport_channel),
+                            Buttons::Tap => send_transport_cc(port, settings.transport_cc_map.tap, status, settings.transport_channel),
+                            Buttons::Follow => send_transport_cc(port, settings.transport_cc_map.follow, status, settings.transport_channel),
+                            _ => {}
                         }
                     }
                 }

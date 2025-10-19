@@ -1,3 +1,22 @@
+# Pad note mappings (MIDI note numbers for the 16 pads)
 notemaps = [49, 27, 31, 57, 48, 47, 43, 59, 36, 38, 46, 51, 36, 38, 42, 44]
+
+# MIDI client and port names
 client_name = "Maschine Mikro MK3"
 port_name = "Maschine Mikro MK3 MIDI Out"
+
+# Transport button MIDI channel (valid range: 0-15, default: 0)
+# This determines which MIDI channel transport buttons send messages on
+transport_channel = 0
+
+# Transport button CC mappings (valid range: 0-127)
+# These CC numbers are sent when transport buttons are pressed/released
+# Button press sends value 127, button release sends value 0
+[transport_cc_map]
+play = 118
+stop = 117
+rec = 119
+restart = 116
+erase = 120
+tap = 121
+follow = 122
