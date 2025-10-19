@@ -123,7 +123,7 @@ fn main_loop(
                     if button_state_changed {
                         button_states[idx] = status;
                         if status {
-                            println!("{:?}", button);
+                            println!("New status: {:?}", button);
                         }
                     }
                     
@@ -186,7 +186,7 @@ fn main_loop(
                             
                             // Modifier buttons
                             Buttons::Shift => send_transport_cc(port, settings.button_cc_map.shift, status, settings.button_channel),
-                            Buttons::FixedVol => send_transport_cc(port, settings.button_cc_map.fixed_vol, status, settings.button_channel),
+                            Buttons::FixedVel => send_transport_cc(port, settings.button_cc_map.fixed_vol, status, settings.button_channel),
                             
                             // Pad Mode buttons
                             Buttons::PadMode => send_transport_cc(port, settings.button_cc_map.pad_mode, status, settings.button_channel),

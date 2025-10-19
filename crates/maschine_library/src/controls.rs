@@ -34,7 +34,7 @@ pub enum Buttons {
 
     Stop = 24,
     Shift = 25,
-    FixedVol = 26,
+    FixedVel = 26,
     PadMode = 27,
 
     Keyboard = 28,
